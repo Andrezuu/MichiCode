@@ -8,7 +8,7 @@ import {
   Stack,
 } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
-const QRCode = require('qrcode.react').default;
+import { QRCodeCanvas } from 'qrcode.react';
 
 const QRGenerator: React.FC = () => {
   const [text, setText] = useState<string>('');
@@ -43,7 +43,7 @@ const QRGenerator: React.FC = () => {
           }}
         >
           {text ? (
-            <QRCode value={text} size={256} level="H" includeMargin />
+            <QRCodeCanvas value={text} size={256} level="H" includeMargin />
           ) : (
             <Typography color="text.secondary" variant="h6">
               Escribe algo arriba para generar el QR

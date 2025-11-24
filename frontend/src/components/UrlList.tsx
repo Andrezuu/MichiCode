@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import {
   Paper,
   Typography,
@@ -11,7 +11,7 @@ import {
   Divider,
 } from '@mui/material';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import axios from 'axios';
+import useFetch from '../hooks/useFetch';
 
 interface UrlItem {
   shortCode: string;
@@ -22,19 +22,7 @@ interface UrlItem {
 }
 
 const UrlList: React.FC = () => {
-  const [urls, setUrls] = useState<UrlItem[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    axios
-      .get('http://localhost:5000/api/urls')
-      .then((res) => setUrls(res.data))
-      .catch((err) => {
-        console.error('Error cargando URLs:', err);
-        setUrls([]);
-      })
-      .finally(() => setLoading(false));
-  }, []);
+  const { data: urls, loading, error } = useFetch<UrlItem[]>('/urls');
 
   if (loading) {
     return (
@@ -47,14 +35,36 @@ const UrlList: React.FC = () => {
     );
   }
 
+  if (error) {
+    return (
+      <Typography textAlign="center" color="error" variant="h6" mt={4}>
+        {error}
+      </Typography>
+    );
+  }
+
   return (
-    <Paper elevation={10} sx={{ p: { xs: 3, sm: 5 }, borderRadius: 4, maxWidth: 900, mx: 'auto' }}>
-      <Typography variant="h4" fontWeight="bold" textAlign="center" gutterBottom color="primary">
+    <Paper
+      elevation={10}
+      sx={{ p: { xs: 3, sm: 5 }, borderRadius: 4, maxWidth: 900, mx: 'auto' }}
+    >
+      <Typography
+        variant="h4"
+        fontWeight="bold"
+        textAlign="center"
+        gutterBottom
+        color="primary"
+      >
         Historial de URLs Acortadas
       </Typography>
 
-      {urls.length === 0 ? (
-        <Typography textAlign="center" color="text.secondary" variant="h6" mt={4}>
+      {!urls || urls.length === 0 ? (
+        <Typography
+          textAlign="center"
+          color="text.secondary"
+          variant="h6"
+          mt={4}
+        >
           Aún no has acortado ninguna URL
         </Typography>
       ) : (
@@ -73,7 +83,10 @@ const UrlList: React.FC = () => {
                         sx={{ color: 'primary.main', fontWeight: 'bold' }}
                       >
                         {item.shortUrl}
-                        <OpenInNewIcon fontSize="small" sx={{ ml: 0.5, verticalAlign: 'middle' }} />
+                        <OpenInNewIcon
+                          fontSize="small"
+                          sx={{ ml: 0.5, verticalAlign: 'middle' }}
+                        />
                       </Typography>
                     </Box>
                   }
@@ -82,10 +95,23 @@ const UrlList: React.FC = () => {
                       <Typography variant="body2" color="text.secondary" noWrap>
                         {item.originalUrl}
                       </Typography>
-                      <Box sx={{ mt: 1, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                        <Chip label={`${item.clicks} clicks`} color="primary" size="small" />
+                      <Box
+                        sx={{
+                          mt: 1,
+                          display: 'flex',
+                          gap: 1,
+                          flexWrap: 'wrap',
+                        }}
+                      >
                         <Chip
-                          label={new Date(item.createdAt).toLocaleDateString('es-ES')}
+                          label={`${item.clicks} clicks`}
+                          color="primary"
+                          size="small"
+                        />
+                        <Chip
+                          label={new Date(item.createdAt).toLocaleDateString(
+                            'es-ES'
+                          )}
                           color="default"
                           size="small"
                         />
