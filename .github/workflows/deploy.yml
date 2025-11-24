@@ -30,9 +30,9 @@ jobs:
 
       - name: Deploy a las 3 EC2
         env:
-          KEY_BACKEND: ${{ secrets.SSH_KEY_BACKEND }}
-          KEY_FRONTEND: ${{ secrets.SSH_KEY_FRONTEND }}
-          KEY_MONGO: ${{ secrets.SSH_KEY_MONGO }}
+          KEY_BACKEND: ${{ secrets.VM1_PEM}}
+          KEY_FRONTEND: ${{ secrets.VM2_PEM }}
+          KEY_MONGO: ${{ secrets.VM3_PEM }}
         run: |
           echo "$KEY_BACKEND" > key1.pem && chmod 400 key1.pem
           echo "$KEY_FRONTEND" > key2.pem && chmod 400 key2.pem
