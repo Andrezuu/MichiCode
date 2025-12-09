@@ -3,7 +3,6 @@ services:
   mongo:
     image: mongo:6
     container_name: michicode-mongo
-    restart: always
     ports:
       - "27017:27017"
     environment:

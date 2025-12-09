@@ -8,51 +8,48 @@ import {
   CircularProgress,
   Typography,
   IconButton,
-  InputAdornment,
 } from '@mui/material';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import axios from 'axios';
-
-const API_URL = process.env.REACT_APP_API_BASE_URL;
+import { apiService } from '../services/api';
 
 const UrlShortener: React.FC = () => {
   const [url, setUrl] = useState('');
   const [result, setResult] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
+  
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!url) return;
-
+    
     setLoading(true);
     setError('');
     setResult(null);
-
+  
     try {
-      const response = await axios.post(`${API_URL}/shorten`, { originalUrl: url });
+      const response = await apiService.shortenUrl(url);
       setResult(response.data.shortUrl);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Error al acortar la URL');
+      setError(err.response?.data?.message || 'Error al acortar la URL. Revisa la URL y la conexión al servidor.');
     } finally {
       setLoading(false);
     }
   };
-
+  
   const copyToClipboard = () => {
     if (result) {
       navigator.clipboard.writeText(result);
-      alert('¡URL copiada al portapapeles!');
+      alert('¡URL copiada al portapapeles!'); 
     }
   };
-
+  
   return (
-    <Paper elevation={10} sx={{ p: { xs: 3, sm: 5 }, borderRadius: 4, maxWidth: 700, mx: 'auto' }}>
-      <Typography variant="h4" fontWeight="bold" textAlign="center" gutterBottom color="primary">
-        Acortador de URLs
+  <Paper elevation={10} sx={{ p: { xs: 3, sm: 5 }, borderRadius: 4, maxWidth: 700, mx: 'auto' }}>
+    <Typography variant="h4" fontWeight="bold" textAlign="center" gutterBottom color="primary">
+      Acortador de URLs
       </Typography>
-
+      
       <Box component="form" onSubmit={handleSubmit} sx={{ mt: 4 }}>
         <TextField
           fullWidth
@@ -66,7 +63,7 @@ const UrlShortener: React.FC = () => {
           size="medium"
           sx={{ mb: 3 }}
         />
-
+        
         <Button
           type="submit"
           variant="contained"
@@ -75,17 +72,17 @@ const UrlShortener: React.FC = () => {
           fullWidth
           disabled={loading}
           sx={{ py: 2, fontSize: '1.2rem' }}
-        >
+          >
           {loading ? <CircularProgress size={28} color="inherit" /> : 'Acortar URL'}
         </Button>
       </Box>
-
+      
       {error && (
         <Alert severity="error" sx={{ mt: 3 }}>
           {error}
         </Alert>
       )}
-
+      
       {result && (
         <Alert severity="success" sx={{ mt: 4 }}>
           <Typography variant="h6" gutterBottom>
@@ -103,7 +100,7 @@ const UrlShortener: React.FC = () => {
               {result}
               <OpenInNewIcon fontSize="small" sx={{ ml: 0.5, verticalAlign: 'middle' }} />
             </Typography>
-
+            
             <IconButton color="success" onClick={copyToClipboard}>
               <ContentCopyIcon />
             </IconButton>

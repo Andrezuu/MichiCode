@@ -23,7 +23,7 @@ interface UrlItem {
 
 const UrlList: React.FC = () => {
   const { data: urls, loading, error } = useFetch<UrlItem[]>('/urls');
-
+  
   if (loading) {
     return (
       <Box textAlign="center" py={10}>
@@ -34,7 +34,7 @@ const UrlList: React.FC = () => {
       </Box>
     );
   }
-
+  
   if (error) {
     return (
       <Typography textAlign="center" color="error" variant="h6" mt={4}>
@@ -42,7 +42,7 @@ const UrlList: React.FC = () => {
       </Typography>
     );
   }
-
+  
   return (
     <Paper
       elevation={10}
@@ -57,7 +57,7 @@ const UrlList: React.FC = () => {
       >
         Historial de URLs Acortadas
       </Typography>
-
+      
       {!urls || urls.length === 0 ? (
         <Typography
           textAlign="center"
@@ -71,7 +71,7 @@ const UrlList: React.FC = () => {
         <List>
           {urls.map((item, index) => (
             <React.Fragment key={item.shortCode}>
-              <ListItem alignItems="flex-start">
+              <ListItem alignItems="flex-start" key={item.shortCode}>
                 <ListItemText
                   primary={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -90,18 +90,13 @@ const UrlList: React.FC = () => {
                       </Typography>
                     </Box>
                   }
-                  secondary={
-                    <>
+                    secondary={
+                    <React.Fragment>
                       <Typography variant="body2" color="text.secondary" noWrap>
                         {item.originalUrl}
                       </Typography>
                       <Box
-                        sx={{
-                          mt: 1,
-                          display: 'flex',
-                          gap: 1,
-                          flexWrap: 'wrap',
-                        }}
+                        sx={{ mt: 1, display: 'flex', gap: 1, flexWrap: 'wrap' }}
                       >
                         <Chip
                           label={`${item.clicks} clicks`}
@@ -116,8 +111,9 @@ const UrlList: React.FC = () => {
                           size="small"
                         />
                       </Box>
-                    </>
+                    </React.Fragment>
                   }
+                  secondaryTypographyProps={{ component: 'div' }}
                 />
               </ListItem>
               {index < urls.length - 1 && <Divider />}
