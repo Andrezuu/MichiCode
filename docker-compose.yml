@@ -1,7 +1,6 @@
 version: '3.8'
 
 services:
-  # Base de Datos: MongoDB
   mongo:
     image: mongo:6
     container_name: michicode-mongo
@@ -9,18 +8,13 @@ services:
       - "27017:27017"
     restart: always
     environment:
-      # Usar credenciales por defecto para el desarrollo local
       MONGO_INITDB_ROOT_USERNAME: root
       MONGO_INITDB_ROOT_PASSWORD: rootpassword
       MONGO_INITDB_DATABASE: michicode
     volumes:
       - mongo-data:/data/db
-      #- ./database/init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
-
-  # Backend: Node.js/Express
   backend:
     build:
-      # CONTEXTO CORREGIDO: Apunta a la carpeta del backend
       context: ./backend 
       dockerfile: Dockerfile
     container_name: michicode-backend
@@ -34,10 +28,8 @@ services:
     depends_on:
       - mongo
 
-  # Frontend: React/Nginx
   frontend:
     build:
-      # CONTEXTO CORREGIDO: Apunta a la carpeta del frontend
       context: ./frontend
       dockerfile: Dockerfile
       args:

@@ -1,4 +1,4 @@
-import React, { useState } from "react"; // Importar useState
+import React, { useState } from "react";
 import { Container, Stack, Typography, Box, Grid } from "@mui/material";
 import UrlShortener from "../components/UrlShortener";
 import QRGenerator from "../components/QRGenerator";
