@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  # Base de Datos: MongoDB
+  mongo:
+    image: mongo:6
+    container_name: michicode-mongo
+    restart: always
+    environment:
+      # USANDO VARIABLES DE ENTORNO DEL PIPELINE (Requisito de secretos)
+      MONGO_INITDB_ROOT_USERNAME: ${DB_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${DB_PASSWORD}
+      MONGO_INITDB_DATABASE: michicode
+    volumes:
+      - mongo-data:/data/db
+      - ./database/init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
+    # Usamos la imagen base directamente (no hay build en EC2)
+
+  # Backend: Node.js/Express
+  backend:
+    # Usamos la imagen PULLiada desde Docker Hub por el pipeline
+    image: ${DOCKER_HUB_USER}/michicode-backend:latest 
+    container_name: michicode-backend
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      PORT: 5000
+      # USANDO VARIABLES DE ENTORNO DEL PIPELINE
+      MONGODB_URI: mongodb://${DB_USER}:${DB_PASSWORD}@mongo:27017/michicode?authSource=admin
+      BASE_URL: http://${EC2_HOST_DNS}:5000 # Usamos el DNS público
+    depends_on:
+      - mongo
+
+  # Frontend: React/Nginx
+  frontend:
+    # Usamos la imagen PULLiada desde Docker Hub por el pipeline
+    image: ${DOCKER_HUB_USER}/michicode-frontend:latest 
+    container_name: michicode-frontend
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  mongo-data:

@@ -1,37 +1,41 @@
 # ----------------------------------------------------
 # 1. BUILD STAGE (Compilación de TypeScript)
 # ----------------------------------------------------
-# Usamos una imagen base ligera para el build
+# USANDO EL NOMBRE 'builder' EXPLÍCITAMENTE
 FROM node:20-alpine AS builder
 
 WORKDIR /app/backend
-# Copiamos solo los archivos de dependencias para aprovechar el caché
-COPY backend/package*.json ./
-# Instalamos dependencias de desarrollo y producción
-RUN npm install
+
+# Copiamos solo los archivos de dependencias
+COPY package*.json ./
+# Instalamos dependencias de desarrollo y producción (necesarias para la compilación)
+RUN npm install --unsafe-perm
 
 # Copiamos el código fuente
-COPY backend/ .
+COPY . .
 # Compilamos el TypeScript. Esto crea la carpeta 'dist/'
 RUN npm run build
 
 # ----------------------------------------------------
 # 2. PRODUCTION STAGE (Solo ejecución)
 # ----------------------------------------------------
-# Usamos la misma imagen base ligera para producción
+# Usamos una imagen base ligera y limpia para el runtime
 FROM node:20-alpine
 
-# Definimos el puerto (aunque también se definirá en docker-compose/EC2)
-ENV PORT 5000
+# Definimos el puerto
+ENV PORT=5000 
 WORKDIR /app
 
-# Copiamos solo las dependencias de producción del backend
-COPY backend/package*.json ./
-# Solo instalamos dependencias de producción (más ligeras)
-RUN npm install --only=production
+# Copiamos solo las dependencias de producción
+COPY package*.json ./
+# Solo instalamos dependencias de producción
+RUN npm install --only=production --unsafe-perm
 
-# Copiamos el código compilado desde el 'builder' stage
+# Limpiamos el caché de npm (Buena práctica para reducir la imagen)
+RUN npm cache clean --force
+
+# Copiamos el código compilado desde la etapa 'builder'
 COPY --from=builder /app/backend/dist ./dist
 
-# Comando para iniciar la aplicación (referencia a "start": "node dist/server.js" en package.json)
+# Comando para iniciar la aplicación
 CMD [ "node", "dist/server.js" ]
