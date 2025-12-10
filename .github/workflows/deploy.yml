@@ -3,93 +3,102 @@ name: CI/CD MichiCode - Despliegue Dockerizado
 on:
   push:
     branches: [ main ]
-  # Opcional: Permite ejecutar el workflow manualmente
   workflow_dispatch:
 
-# Definimos variables de entorno generales (puedes cambiar 'user/repo')
+# Definimos variables de entorno generales
 env:
   DOCKER_IMAGE_BACKEND: ${{ secrets.DOCKER_HUB_USERNAME }}/michicode-backend
   DOCKER_IMAGE_FRONTEND: ${{ secrets.DOCKER_HUB_USERNAME }}/michicode-frontend
   EC2_HOST: ${{ secrets.EC2_HOST_IP }}
-  EC2_USER: ec2-user # o ubuntu, dependiendo de tu AMI
+  # ¡CORREGIDO! El usuario de la AMI Ubuntu es 'ubuntu'
+  EC2_USER: ubuntu 
 
 jobs:
-  build-push-deploy:
+  build-push:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout del código
         uses: actions/checkout@v4
 
-      # --- 1. Login a Docker Hub (o Registry de tu elección) ---
+      # [cite_start]--- 1. Login a Docker Hub (Requisito: Gestión de secretos) [cite: 40] ---
       - name: Login a Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
       
-      # --- 2. Build de Imágenes Docker ---
-      # [cite_start]Requisito: Las imágenes deben construirse dentro del pipeline [cite: 35, 37]
-      - name: Build Imagen Backend
+      # [cite_start]--- 2. Build y Push de Imágenes Docker (Requisito: Contenerización en Pipeline) [cite: 35, 37] ---
+      - name: Build y Push Imagen Backend
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./backend/Dockerfile
           push: true
-          tags: ${{ env.DOCKER_IMAGE_BACKEND }}:${{ github.sha }}, ${{ env.DOCKER_IMAGE_BACKEND }}:latest
-          # Se pasa la URL de producción (EC2_HOST) como variable de entorno
+          tags: ${{ env.DOCKER_IMAGE_BACKEND }}:latest
           build-args: |
-            BASE_URL=${{ secrets.EC2_HOST_DNS }}
+            BASE_URL=http://${{ secrets.EC2_HOST_DNS }}:5000
       
-      - name: Build Imagen Frontend
+      - name: Build y Push Imagen Frontend
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./frontend/Dockerfile
           push: true
-          tags: ${{ env.DOCKER_IMAGE_FRONTEND }}:${{ github.sha }}, ${{ env.DOCKER_IMAGE_FRONTEND }}:latest
-          # El frontend debe saber a dónde llamar a la API
+          tags: ${{ env.DOCKER_IMAGE_FRONTEND }}:latest
           build-args: |
             REACT_APP_API_BASE_URL=http://${{ secrets.EC2_HOST_DNS }}:5000
-
-      # --- 3. Despliegue a EC2 ---
-      # [cite_start]Requisito: Desplegar en EC2 usando un pipeline y secretos [cite: 13, 14, 39, 40]
-      - name: Despliegue vía SSH a EC2
+            
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-push # Espera a que las imágenes se construyan y suban
+    
+    steps:
+      - name: Checkout del código (Necesario para copiar archivos de orquestación)
+        uses: actions/checkout@v4
+        
+      # [cite_start]--- 3. Despliegue a EC2 (Requisito: Despliegue en EC2) [cite: 13, 39] ---
+      - name: Despliegue y Orquestación vía SSH a EC2
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ env.EC2_HOST }}
-          username: ${{ env.EC2_USER }}
-          # Usar una clave SSH almacenada en GitHub Secrets
+          username: ${{ env.EC2_USER }} # ¡CORREGIDO: ubuntu!
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          # El despliegue a una EC2 requiere:
-          # 1. Copiar el docker-compose.yml (o tenerlo ya)
-          # 2. Ejecutar docker pull para obtener las imágenes nuevas
-          # 3. Ejecutar docker-compose up -d
           script: |
-            # Crear directorio de trabajo si no existe
-            mkdir -p ~/michicode-app
-            cd ~/michicode-app
+            REMOTE_DIR="/home/${{ env.EC2_USER }}/michicode-app"
             
-            # Copiar docker-compose.yml de la carpeta .github/ al servidor,
-            # o copiarlo de tu repo si ya lo tienes en el servidor.
-            # Aquí asumo que lo copiamos del repo (necesitarás el archivo en el repo)
+            # --- PREPARACIÓN EN EC2 ---
             
-            # Detener contenedores viejos y borrar imágenes antiguas
-            docker-compose down || true
+            # 1. Crear directorio de trabajo y asegurar que Docker Compose esté listo
+            mkdir -p ${REMOTE_DIR}
+            cd ${REMOTE_DIR}
             
-            # Comando para hacer pull de las nuevas imágenes
-            docker pull ${{ env.DOCKER_IMAGE_BACKEND }}:${{ github.sha }}
-            docker pull ${{ env.DOCKER_IMAGE_FRONTEND }}:${{ github.sha }}
+            # 2. Copiar docker-compose.prod.yml y archivos de inicialización de la DB (init-mongo.js)
+            # Usamos rsync para copiar archivos del runner a la EC2.
+            # Nota: Necesitas que 'database/' esté disponible en el runner.
+            echo "Copiando archivos de orquestación..."
+            rsync -avz -e "ssh -i /dev/stdin -o StrictHostKeyChecking=no" \
+              ./docker-compose.prod.yml ./database \
+              ${{ env.EC2_USER }}@${{ env.EC2_HOST }}:${REMOTE_DIR}/
             
-            # Levantamos los nuevos contenedores (usando el tag específico del commit)
-            # Requerirá un docker-compose.prod.yml que use estos tags y variables de entorno
+            # --- EJECUCIÓN DEL DESPLIEGUE ---
             
-            # Esto es un ejemplo simplificado; la versión final requerirá
-            # que el docker-compose.prod.yml esté presente en EC2.
+            # 3. Detener contenedores viejos y descargar imagen base de la DB
+            docker compose down || true
+            docker pull mongo:6
             
-            # EJEMPLO SIMPLIFICADO: Copiando docker-compose (asume que está en la raíz)
-            # Asegúrate de que este archivo ya tiene las referencias a las imágenes
-            # con el TAG: latest o github.sha y las variables de entorno de producción.
+            # 4. Comando para hacer pull de las nuevas imágenes (usando el tag 'latest')
+            docker pull ${{ env.DOCKER_IMAGE_BACKEND }}:latest
+            docker pull ${{ env.DOCKER_IMAGE_FRONTEND }}:latest
             
-            # docker-compose -f docker-compose.prod.yml up -d
+            # 5. Levantamos los contenedores con las variables de entorno de producción
+            # Inyectamos los secretos del shell para que docker-compose.prod.yml pueda leerlos.
+            echo "Ejecutando Docker Compose UP..."
+            DOCKER_HUB_USERNAME="${{ secrets.DOCKER_HUB_USERNAME }}"
+            EC2_HOST_DNS="${{ secrets.EC2_HOST_DNS }}"
             
-            echo "Despliegue de imágenes ${{ github.sha }} completado en EC2."
+            # [cite_start]Ejecución del comando de orquestación [cite: 13, 39]
+            DOCKER_HUB_USERNAME=$DOCKER_HUB_USERNAME \
+            EC2_HOST_DNS=$EC2_HOST_DNS \
+            docker compose -f docker-compose.prod.yml up -d
+            
+            echo "¡DESPLIEGUE AUTOMÁTICO COMPLETADO! La aplicación debe estar disponible en http://${EC2_HOST_DNS}"
