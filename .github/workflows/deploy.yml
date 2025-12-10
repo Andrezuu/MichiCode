@@ -59,7 +59,7 @@ jobs:
       - name: Checkout repo para copiar archivos
         uses: actions/checkout@v4
 
-      # NUEVO PASO CRÍTICO: Configuración de la EC2 (Instalar Docker/Compose y Permisos)
+      # PASO 1: Configuración de la EC2 (Instalar Docker/Compose y Permisos)
       - name: Configurar e Instalar Docker en EC2
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -69,7 +69,7 @@ jobs:
           script: |
             echo "✔ Instalando y configurando Docker y Compose..."
             
-            # Actualizar e instalar Docker y Compose
+            # Actualizar e instalar Docker y Docker Compose V1 (usa el comando 'docker-compose')
             sudo apt update
             sudo apt install -y docker.io docker-compose
             
@@ -77,7 +77,7 @@ jobs:
             sudo systemctl start docker
             sudo systemctl enable docker
             
-            # CRÍTICO: Añadir el usuario ubuntu al grupo docker para usar 'docker compose' sin sudo
+            # CRÍTICO: Añadir el usuario ubuntu al grupo docker para usar el comando sin sudo
             sudo usermod -aG docker ubuntu
             
             # Crear el directorio de despliegue
@@ -108,13 +108,13 @@ jobs:
             cd ${{ env.REMOTE_DIR }}
 
             # 2. CRÍTICO: Crear .env.prod para inyectar los secretos de la DB
-            # Se usan los nombres esperados por docker-compose.prod.yml (DB_USER/DB_PASSWORD)
+            # Se usan los nombres esperados por docker-compose.prod.yml para el Backend URI (DB_USER/DB_PASSWORD)
+            # Y los nombres para la inicialización del contenedor Mongo (MONGO_INITDB_ROOT_*)
             echo "Inyectando secretos de DB..."
             cat << EOF > .env.prod
             DB_USER=${{ secrets.MONGO_INITDB_ROOT_USERNAME }}
             DB_PASSWORD=${{ secrets.MONGO_INITDB_ROOT_PASSWORD }}
             
-            # Variables de inicialización de Mongo
             MONGO_INITDB_ROOT_USERNAME=${{ secrets.MONGO_INITDB_ROOT_USERNAME }}
             MONGO_INITDB_ROOT_PASSWORD=${{ secrets.MONGO_INITDB_ROOT_PASSWORD }}
             MONGO_INITDB_DATABASE=${{ secrets.MONGO_INITDB_DATABASE }}
@@ -122,7 +122,8 @@ jobs:
             
             # 3. Limpieza y Pull
             echo "Deteniendo y actualizando imágenes..."
-            docker compose down || true
+            # CORRECCIÓN: Cambiado a la sintaxis V1 'docker-compose'
+            docker-compose down || true
 
             # Pull de las imágenes más recientes
             docker pull mongo:6
@@ -131,7 +132,8 @@ jobs:
             
             # 4. Arrancar el stack usando el archivo de producción y los secretos inyectados
             echo "Arrancando stack en modo producción..."
-            docker compose --file docker-compose.prod.yml --env-file .env.prod up -d --remove-orphans
+            # CORRECCIÓN: Cambiado a la sintaxis V1 'docker-compose'
+            docker-compose --file docker-compose.prod.yml --env-file .env.prod up -d --remove-orphans
 
             echo "Contenedores activos:"
             docker ps -a
