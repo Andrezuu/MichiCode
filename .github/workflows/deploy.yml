@@ -10,9 +10,8 @@ env:
   DOCKER_IMAGE_BACKEND: ${{ secrets.DOCKER_HUB_USERNAME }}/michicode-backend
   DOCKER_IMAGE_FRONTEND: ${{ secrets.DOCKER_HUB_USERNAME }}/michicode-frontend
   EC2_HOST: ${{ secrets.EC2_HOST_IP }}
-  # Usuario correcto para la AMI Ubuntu. Esto corrige el fallo de autenticación.
   EC2_USER: ubuntu 
-  REMOTE_DIR: /home/ubuntu/michicode-app # Directorio de destino fijo
+  REMOTE_DIR: /home/ubuntu/michicode-app 
 
 jobs:
   build-push:
@@ -58,17 +57,14 @@ jobs:
         uses: actions/checkout@v4
         
       # --- 3A. Sincronizar Archivos (Solución al Directorio Vacío) ---
-      # Usamos scp-action para garantizar que los archivos lleguen a la EC2.
       - name: Copiar archivos de Orquestación y DB a EC2
         uses: appleboy/scp-action@v0.1.7 
         with:
           host: ${{ env.EC2_HOST }}
           username: ${{ env.EC2_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          # Crea el directorio si no existe y copia: docker-compose.prod.yml y la carpeta database
           source: "docker-compose.prod.yml, database"
           target: "${{ env.REMOTE_DIR }}"
-          # Aseguramos que el directorio de destino exista antes de la copia
           command_timeout: 100s
           
       # --- 3B. [cite_start]Ejecutar Docker Compose UP (Requisito: Despliegue en EC2) [cite: 13, 39] ---
@@ -84,9 +80,9 @@ jobs:
             
             # --- EJECUCIÓN DEL DESPLIEGUE ---
             
-            # 1. Detener e intentar limpiar contenedores viejos
-            docker compose down --remove-orphans || true
-            docker pull mongo:6 # Asegurar que la imagen base de la DB está lista
+            # 1. Detener e intentar limpiar contenedores viejos (Se quita --remove-orphans)
+            docker compose down || true
+            docker pull mongo:6 
             
             # 2. Comando para hacer pull de las nuevas imágenes (usando el tag 'latest')
             docker pull ${{ env.DOCKER_IMAGE_BACKEND }}:latest
@@ -95,14 +91,13 @@ jobs:
             # 3. Levantamos los contenedores con las variables de entorno de producción
             echo "Ejecutando Docker Compose UP..."
             
-            # Capturamos los secretos necesarios para inyectarlos en el shell
             DOCKER_HUB_USERNAME="${{ secrets.DOCKER_HUB_USERNAME }}"
             EC2_HOST_DNS="${{ secrets.EC2_HOST_DNS }}"
             
-            # [cite_start]Ejecución del comando de orquestación [cite: 13, 39]
+            # ¡CORRECCIÓN FINAL! Usar la versión larga del flag: --file en lugar de -f
             DOCKER_HUB_USERNAME=$DOCKER_HUB_USERNAME \
             EC2_HOST_DNS=$EC2_HOST_DNS \
-            docker compose -f docker-compose.prod.yml up -d
+            docker compose --file docker-compose.prod.yml up -d
             
             echo "Verificación final de contenedores:"
             docker ps
