@@ -10,8 +10,9 @@ env:
   DOCKER_IMAGE_BACKEND: ${{ secrets.DOCKER_HUB_USERNAME }}/michicode-backend
   DOCKER_IMAGE_FRONTEND: ${{ secrets.DOCKER_HUB_USERNAME }}/michicode-frontend
   EC2_HOST: ${{ secrets.EC2_HOST_IP }}
-  # ¡CORREGIDO! El usuario de la AMI Ubuntu es 'ubuntu'
+  # Usuario correcto para la AMI Ubuntu. Esto corrige el fallo de autenticación.
   EC2_USER: ubuntu 
+  REMOTE_DIR: /home/ubuntu/michicode-app # Directorio de destino fijo
 
 jobs:
   build-push:
@@ -50,49 +51,51 @@ jobs:
             
   deploy:
     runs-on: ubuntu-latest
-    needs: build-push # Espera a que las imágenes se construyan y suban
+    needs: build-push
     
     steps:
       - name: Checkout del código (Necesario para copiar archivos de orquestación)
         uses: actions/checkout@v4
         
-      # [cite_start]--- 3. Despliegue a EC2 (Requisito: Despliegue en EC2) [cite: 13, 39] ---
-      - name: Despliegue y Orquestación vía SSH a EC2
+      # --- 3A. Sincronizar Archivos (Solución al Directorio Vacío) ---
+      # Usamos scp-action para garantizar que los archivos lleguen a la EC2.
+      - name: Copiar archivos de Orquestación y DB a EC2
+        uses: appleboy/scp-action@v0.1.7 
+        with:
+          host: ${{ env.EC2_HOST }}
+          username: ${{ env.EC2_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          # Crea el directorio si no existe y copia: docker-compose.prod.yml y la carpeta database
+          source: "docker-compose.prod.yml, database"
+          target: "${{ env.REMOTE_DIR }}"
+          # Aseguramos que el directorio de destino exista antes de la copia
+          command_timeout: 100s
+          
+      # --- 3B. [cite_start]Ejecutar Docker Compose UP (Requisito: Despliegue en EC2) [cite: 13, 39] ---
+      - name: Ejecutar Docker Compose UP en EC2
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ env.EC2_HOST }}
-          username: ${{ env.EC2_USER }} # ¡CORREGIDO: ubuntu!
+          username: ${{ env.EC2_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            REMOTE_DIR="/home/${{ env.EC2_USER }}/michicode-app"
-            
-            # --- PREPARACIÓN EN EC2 ---
-            
-            # 1. Crear directorio de trabajo y asegurar que Docker Compose esté listo
-            mkdir -p ${REMOTE_DIR}
-            cd ${REMOTE_DIR}
-            
-            # 2. Copiar docker-compose.prod.yml y archivos de inicialización de la DB (init-mongo.js)
-            # Usamos rsync para copiar archivos del runner a la EC2.
-            # Nota: Necesitas que 'database/' esté disponible en el runner.
-            echo "Copiando archivos de orquestación..."
-            rsync -avz -e "ssh -i /dev/stdin -o StrictHostKeyChecking=no" \
-              ./docker-compose.prod.yml ./database \
-              ${{ env.EC2_USER }}@${{ env.EC2_HOST }}:${REMOTE_DIR}/
+            # Moverse al directorio donde se copió el archivo
+            cd ${{ env.REMOTE_DIR }}
             
             # --- EJECUCIÓN DEL DESPLIEGUE ---
             
-            # 3. Detener contenedores viejos y descargar imagen base de la DB
-            docker compose down || true
-            docker pull mongo:6
+            # 1. Detener e intentar limpiar contenedores viejos
+            docker compose down --remove-orphans || true
+            docker pull mongo:6 # Asegurar que la imagen base de la DB está lista
             
-            # 4. Comando para hacer pull de las nuevas imágenes (usando el tag 'latest')
+            # 2. Comando para hacer pull de las nuevas imágenes (usando el tag 'latest')
             docker pull ${{ env.DOCKER_IMAGE_BACKEND }}:latest
             docker pull ${{ env.DOCKER_IMAGE_FRONTEND }}:latest
             
-            # 5. Levantamos los contenedores con las variables de entorno de producción
-            # Inyectamos los secretos del shell para que docker-compose.prod.yml pueda leerlos.
+            # 3. Levantamos los contenedores con las variables de entorno de producción
             echo "Ejecutando Docker Compose UP..."
+            
+            # Capturamos los secretos necesarios para inyectarlos en el shell
             DOCKER_HUB_USERNAME="${{ secrets.DOCKER_HUB_USERNAME }}"
             EC2_HOST_DNS="${{ secrets.EC2_HOST_DNS }}"
             
@@ -101,4 +104,6 @@ jobs:
             EC2_HOST_DNS=$EC2_HOST_DNS \
             docker compose -f docker-compose.prod.yml up -d
             
-            echo "¡DESPLIEGUE AUTOMÁTICO COMPLETADO! La aplicación debe estar disponible en http://${EC2_HOST_DNS}"
+            echo "Verificación final de contenedores:"
+            docker ps
+            echo "¡DESPLIEGUE AUTOMÁTICO COMPLETO! La aplicación debe estar disponible en http://${EC2_HOST_DNS}"
