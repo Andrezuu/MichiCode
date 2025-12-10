@@ -1,10 +1,11 @@
 # ----------------------------------------------------
 # 1. BUILD STAGE (Compilación de la SPA React)
 # ----------------------------------------------------
-# AÑADIMOS EL NOMBRE 'builder' AQUÍ:
 FROM node:20-alpine AS builder 
 
-WORKDIR /app/frontend
+# CRÍTICO: Usar un WORKDIR estándar, ej. /usr/src/app (o /app)
+WORKDIR /usr/src/app
+# No es necesario usar el nombre de la subcarpeta 'frontend'
 COPY package*.json ./
 RUN npm install
 COPY . .
@@ -17,14 +18,12 @@ RUN npm run build
 # ----------------------------------------------------
 FROM nginx:stable-alpine
 
-# Mejor práctica de seguridad: Actualizar paquetes
 RUN apk update && apk upgrade && rm -rf /var/cache/apk/*
 
-# Corregido en el paso anterior
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# La referencia 'builder' ahora apunta a la etapa anterior
-COPY --from=builder /app/frontend/build /usr/share/nginx/html
+# ¡CRÍTICO! Copia el contenido de /usr/src/app/build a la ubicación de Nginx
+COPY --from=builder /usr/src/app/build /usr/share/nginx/html
 
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]

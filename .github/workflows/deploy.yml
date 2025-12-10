@@ -3,9 +3,15 @@ name: CI/CD MichiCode - Despliegue Dockerizado
 on:
   push:
     branches: [ main ]
+  
   workflow_dispatch:
 
+# CRÍTICO: Permite que GitHub Actions acceda a los archivos del repositorio para el SCP
+permissions:
+  contents: read 
+
 env:
+  DOCKER_USER: ${{ secrets.DOCKER_HUB_USERNAME }}
   DOCKER_IMAGE_BACKEND: ${{ secrets.DOCKER_HUB_USERNAME }}/michicode-backend
   DOCKER_IMAGE_FRONTEND: ${{ secrets.DOCKER_HUB_USERNAME }}/michicode-frontend
   EC2_HOST: ${{ secrets.EC2_HOST_IP }}
@@ -16,16 +22,16 @@ jobs:
   build-push:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout Código Fuente
         uses: actions/checkout@v4
 
-      - name: Login Docker Hub
+      - name: Login a Docker Hub
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          username: ${{ env.DOCKER_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
-      - name: Build Backend
+      - name: Build & Push Backend
         uses: docker/build-push-action@v5
         with:
           context: ./backend
@@ -35,7 +41,7 @@ jobs:
           build-args: |
             BASE_URL=http://${{ secrets.EC2_HOST_DNS }}:5000
 
-      - name: Build Frontend
+      - name: Build & Push Frontend
         uses: docker/build-push-action@v5
         with:
           context: ./frontend
@@ -53,52 +59,80 @@ jobs:
       - name: Checkout repo para copiar archivos
         uses: actions/checkout@v4
 
-      - name: CLEAN EC2 antes del despliegue
+      # NUEVO PASO CRÍTICO: Configuración de la EC2 (Instalar Docker/Compose y Permisos)
+      - name: Configurar e Instalar Docker en EC2
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ env.EC2_HOST }}
           username: ${{ env.EC2_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            echo "🧹 Limpiando carpeta previa..."
+            echo "✔ Instalando y configurando Docker y Compose..."
+            
+            # Actualizar e instalar Docker y Compose
+            sudo apt update
+            sudo apt install -y docker.io docker-compose
+            
+            # Iniciar y habilitar Docker
+            sudo systemctl start docker
+            sudo systemctl enable docker
+            
+            # CRÍTICO: Añadir el usuario ubuntu al grupo docker para usar 'docker compose' sin sudo
+            sudo usermod -aG docker ubuntu
+            
+            # Crear el directorio de despliegue
             mkdir -p ${{ env.REMOTE_DIR }}
-            rm -rf  ${{ env.REMOTE_DIR }}/*
+            
+            echo "✔ Configuración de infraestructura básica completada."
 
-            echo "🗂️ Contenido después de limpiar:"
-            ls -la ${{ env.REMOTE_DIR }}
-
-      - name: Subir archivos necesarios a EC2
+      # PASO 2: Transferencia de archivos (SCP)
+      - name: Subir archivos de configuración a EC2
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ env.EC2_HOST }}
           username: ${{ env.EC2_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "./docker-compose.prod.yml, ./database/"
+          source: "docker-compose.prod.yml, frontend/nginx.conf"
           target: "${{ env.REMOTE_DIR }}"
           command_timeout: 200s
 
-      - name: Ejecutar Docker Compose en EC2
+      # PASO 3: Ejecución y Orquestación (SSH)
+      - name: Ejecutar Despliegue en EC2 (Docker Compose)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ env.EC2_HOST }}
           username: ${{ env.EC2_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
+            # 1. Entrar al directorio remoto
             cd ${{ env.REMOTE_DIR }}
 
-            echo "Deteniendo contenedores previos..."
+            # 2. CRÍTICO: Crear .env.prod para inyectar los secretos de la DB
+            # Se usan los nombres esperados por docker-compose.prod.yml (DB_USER/DB_PASSWORD)
+            echo "Inyectando secretos de DB..."
+            cat << EOF > .env.prod
+            DB_USER=${{ secrets.MONGO_INITDB_ROOT_USERNAME }}
+            DB_PASSWORD=${{ secrets.MONGO_INITDB_ROOT_PASSWORD }}
+            
+            # Variables de inicialización de Mongo
+            MONGO_INITDB_ROOT_USERNAME=${{ secrets.MONGO_INITDB_ROOT_USERNAME }}
+            MONGO_INITDB_ROOT_PASSWORD=${{ secrets.MONGO_INITDB_ROOT_PASSWORD }}
+            MONGO_INITDB_DATABASE=${{ secrets.MONGO_INITDB_DATABASE }}
+            EOF
+            
+            # 3. Limpieza y Pull
+            echo "Deteniendo y actualizando imágenes..."
             docker compose down || true
 
-            echo "Actualizando imágenes..."
+            # Pull de las imágenes más recientes
             docker pull mongo:6
             docker pull ${{ env.DOCKER_IMAGE_BACKEND }}:latest
             docker pull ${{ env.DOCKER_IMAGE_FRONTEND }}:latest
-
-            echo "Arrancando stack..."
-            docker compose --file docker-compose.prod.yml up -d
+            
+            # 4. Arrancar el stack usando el archivo de producción y los secretos inyectados
+            echo "Arrancando stack en modo producción..."
+            docker compose --file docker-compose.prod.yml --env-file .env.prod up -d --remove-orphans
 
             echo "Contenedores activos:"
             docker ps -a
-
-            echo "✔ Despliegue completado. URL:"
-            echo "http://${{ secrets.EC2_HOST_DNS }}"
+            echo "✔ Despliegue completado. Acceda a: http://${{ secrets.EC2_HOST_IP }}"
