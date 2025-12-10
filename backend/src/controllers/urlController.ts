@@ -7,7 +7,7 @@ export const shorten = async (req: Request, res: Response) => {
     const { originalUrl } = req.body;
     if (!originalUrl) return res.status(400).json({ message: 'URL requerida' });
     
-    const host = req.protocol + '://' + req.get('host');
+    const host = process.env.PUBLIC_URL_HOST || (req.protocol + '://' + req.get('host'));
     
     const url = await shortenUrl(originalUrl.trim(), host);
     return res.status(201).json(url);
