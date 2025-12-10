@@ -41,7 +41,7 @@ const Home: React.FC = () => {
               lineHeight: 1,
             }}
           >
-            MichiCode
+            MichiCode hola
           </Typography>
                    {" "}
           <Typography
