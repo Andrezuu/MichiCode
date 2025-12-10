@@ -81,7 +81,7 @@ jobs:
             # --- EJECUCIÓN DEL DESPLIEGUE ---
             
             # 1. Detener e intentar limpiar contenedores viejos (Se quita --remove-orphans)
-            docker-compose down || true
+            docker compose down || true
             docker pull mongo:6 
             
             # 2. Comando para hacer pull de las nuevas imágenes (usando el tag 'latest')
@@ -97,7 +97,7 @@ jobs:
             # ¡CORRECCIÓN FINAL! Usar la versión larga del flag: --file en lugar de -f
             DOCKER_HUB_USERNAME=$DOCKER_HUB_USERNAME \
             EC2_HOST_DNS=$EC2_HOST_DNS \
-            docker-compose --file docker-compose.prod.yml up -d
+            docker compose --file docker-compose.prod.yml up -d
             
             echo "Verificación final de contenedores:"
             docker ps
