@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from "react";
 import {
   Paper,
   Typography,
@@ -9,9 +9,9 @@ import {
   CircularProgress,
   Box,
   Divider,
-} from '@mui/material';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import useFetch from '../hooks/useFetch';
+} from "@mui/material";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+import useFetch from "../hooks/useFetch";
 
 interface UrlItem {
   shortCode: string;
@@ -21,20 +21,32 @@ interface UrlItem {
   createdAt: string;
 }
 
-const UrlList: React.FC = () => {
-  const { data: urls, loading, error } = useFetch<UrlItem[]>('/urls');
-  
+interface UrlListProps {
+  refetchTrigger: number;
+}
+
+const UrlList: React.FC<UrlListProps> = ({ refetchTrigger }) => {
+  const {
+    data: urls,
+    loading,
+    error,
+    refetch,
+  } = useFetch<UrlItem[]>("/urls", { skip: true });
+  useEffect(() => {
+    refetch();
+  }, [refetchTrigger, refetch]);
+
   if (loading) {
     return (
       <Box textAlign="center" py={10}>
-        <CircularProgress size={60} />
+          <CircularProgress size={60} />
         <Typography variant="h6" mt={2}>
           Cargando historial...
         </Typography>
       </Box>
     );
   }
-  
+
   if (error) {
     return (
       <Typography textAlign="center" color="error" variant="h6" mt={4}>
@@ -42,11 +54,11 @@ const UrlList: React.FC = () => {
       </Typography>
     );
   }
-  
+
   return (
     <Paper
       elevation={10}
-      sx={{ p: { xs: 3, sm: 5 }, borderRadius: 4, maxWidth: 900, mx: 'auto' }}
+      sx={{ p: { xs: 3, sm: 5 }, borderRadius: 4, maxWidth: 900, mx: "auto" }}
     >
       <Typography
         variant="h4"
@@ -57,7 +69,6 @@ const UrlList: React.FC = () => {
       >
         Historial de URLs Acortadas
       </Typography>
-      
       {!urls || urls.length === 0 ? (
         <Typography
           textAlign="center"
@@ -71,32 +82,37 @@ const UrlList: React.FC = () => {
         <List>
           {urls.map((item, index) => (
             <React.Fragment key={item.shortCode}>
-              <ListItem alignItems="flex-start" key={item.shortCode}>
+              <ListItem alignItems="flex-start">
                 <ListItemText
                   primary={
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                       <Typography
                         component="a"
                         href={item.shortUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        sx={{ color: 'primary.main', fontWeight: 'bold' }}
+                        sx={{ color: "primary.main", fontWeight: "bold" }}
                       >
                         {item.shortUrl}
                         <OpenInNewIcon
                           fontSize="small"
-                          sx={{ ml: 0.5, verticalAlign: 'middle' }}
+                          sx={{ ml: 0.5, verticalAlign: "middle" }}
                         />
                       </Typography>
                     </Box>
                   }
-                    secondary={
+                  secondary={
                     <React.Fragment>
                       <Typography variant="body2" color="text.secondary" noWrap>
                         {item.originalUrl}
                       </Typography>
                       <Box
-                        sx={{ mt: 1, display: 'flex', gap: 1, flexWrap: 'wrap' }}
+                        sx={{
+                          mt: 1,
+                          display: "flex",
+                          gap: 1,
+                          flexWrap: "wrap",
+                        }}
                       >
                         <Chip
                           label={`${item.clicks} clicks`}
@@ -105,7 +121,7 @@ const UrlList: React.FC = () => {
                         />
                         <Chip
                           label={new Date(item.createdAt).toLocaleDateString(
-                            'es-ES'
+                            "es-ES"
                           )}
                           color="default"
                           size="small"
@@ -113,7 +129,7 @@ const UrlList: React.FC = () => {
                       </Box>
                     </React.Fragment>
                   }
-                  secondaryTypographyProps={{ component: 'div' }}
+                  secondaryTypographyProps={{ component: "div" }}
                 />
               </ListItem>
               {index < urls.length - 1 && <Divider />}

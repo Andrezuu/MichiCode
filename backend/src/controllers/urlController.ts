@@ -6,8 +6,10 @@ export const shorten = async (req: Request, res: Response) => {
   try {
     const { originalUrl } = req.body;
     if (!originalUrl) return res.status(400).json({ message: 'URL requerida' });
-
-    const url = await shortenUrl(originalUrl.trim());
+    
+    const host = req.protocol + '://' + req.get('host');
+    
+    const url = await shortenUrl(originalUrl.trim(), host);
     return res.status(201).json(url);
   } catch (error: any) {
     return res.status(400).json({ message: error.message || 'Error al acortar' });
