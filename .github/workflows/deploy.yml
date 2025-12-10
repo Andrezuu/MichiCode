@@ -13,33 +13,32 @@ env:
   REMOTE_DIR: /home/ubuntu/michicode-app
 
 jobs:
-
   build-push:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout del código
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Login a Docker Hub
+      - name: Login Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
-      - name: Build y Push Imagen Backend
+      - name: Build Backend
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ./backend
           file: ./backend/Dockerfile
           push: true
           tags: ${{ env.DOCKER_IMAGE_BACKEND }}:latest
           build-args: |
             BASE_URL=http://${{ secrets.EC2_HOST_DNS }}:5000
 
-      - name: Build y Push Imagen Frontend
+      - name: Build Frontend
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ./frontend
           file: ./frontend/Dockerfile
           push: true
           tags: ${{ env.DOCKER_IMAGE_FRONTEND }}:latest
@@ -51,32 +50,33 @@ jobs:
     needs: build-push
 
     steps:
-      - name: Checkout del código
+      - name: Checkout repo para copiar archivos
         uses: actions/checkout@v4
 
-      # 1. Crear directorio remoto si no existe
-      - name: Crear directorio remoto en EC2
+      - name: CLEAN EC2 antes del despliegue
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ env.EC2_HOST }}
           username: ${{ env.EC2_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
+            echo "🧹 Limpiando carpeta previa..."
             mkdir -p ${{ env.REMOTE_DIR }}
+            rm -rf  ${{ env.REMOTE_DIR }}/*
 
-      # 2. Copiar archivos correctamente
-      - name: Copiar docker-compose.prod.yml y database/
+            echo "🗂️ Contenido después de limpiar:"
+            ls -la ${{ env.REMOTE_DIR }}
+
+      - name: Subir archivos necesarios a EC2
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ env.EC2_HOST }}
           username: ${{ env.EC2_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          target: ${{ env.REMOTE_DIR }}
-          source: |
-            docker-compose.prod.yml
-            database/**
+          source: "./docker-compose.prod.yml, ./database/"
+          target: "${{ env.REMOTE_DIR }}"
+          command_timeout: 200s
 
-      # 3. Ejecutar despliegue en EC2
       - name: Ejecutar Docker Compose en EC2
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -89,18 +89,16 @@ jobs:
             echo "Deteniendo contenedores previos..."
             docker compose down || true
 
-            echo "Actualizando imágenes desde Docker Hub..."
+            echo "Actualizando imágenes..."
+            docker pull mongo:6
             docker pull ${{ env.DOCKER_IMAGE_BACKEND }}:latest
             docker pull ${{ env.DOCKER_IMAGE_FRONTEND }}:latest
-            docker pull mongo:6
 
-            echo "Iniciando despliegue con docker-compose.prod.yml..."
-            DOCKER_HUB_USERNAME="${{ secrets.DOCKER_HUB_USERNAME }}" \
-            EC2_HOST_DNS="${{ secrets.EC2_HOST_DNS }}" \
+            echo "Arrancando stack..."
             docker compose --file docker-compose.prod.yml up -d
 
-            echo "Contenedores corriendo:"
-            docker ps
+            echo "Contenedores activos:"
+            docker ps -a
 
-            echo "Despliegue completado. Aplicación disponible en:"
+            echo "✔ Despliegue completado. URL:"
             echo "http://${{ secrets.EC2_HOST_DNS }}"
