@@ -5,29 +5,27 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
-# Definimos variables de entorno generales
 env:
   DOCKER_IMAGE_BACKEND: ${{ secrets.DOCKER_HUB_USERNAME }}/michicode-backend
   DOCKER_IMAGE_FRONTEND: ${{ secrets.DOCKER_HUB_USERNAME }}/michicode-frontend
   EC2_HOST: ${{ secrets.EC2_HOST_IP }}
-  EC2_USER: ubuntu 
-  REMOTE_DIR: /home/ubuntu/michicode-app 
+  EC2_USER: ubuntu
+  REMOTE_DIR: /home/ubuntu/michicode-app
 
 jobs:
+
   build-push:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout del código
         uses: actions/checkout@v4
 
-      # [cite_start]--- 1. Login a Docker Hub (Requisito: Gestión de secretos) [cite: 40] ---
       - name: Login a Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
-      
-      # [cite_start]--- 2. Build y Push de Imágenes Docker (Requisito: Contenerización en Pipeline) [cite: 35, 37] ---
+
       - name: Build y Push Imagen Backend
         uses: docker/build-push-action@v5
         with:
@@ -37,7 +35,7 @@ jobs:
           tags: ${{ env.DOCKER_IMAGE_BACKEND }}:latest
           build-args: |
             BASE_URL=http://${{ secrets.EC2_HOST_DNS }}:5000
-      
+
       - name: Build y Push Imagen Frontend
         uses: docker/build-push-action@v5
         with:
@@ -47,58 +45,62 @@ jobs:
           tags: ${{ env.DOCKER_IMAGE_FRONTEND }}:latest
           build-args: |
             REACT_APP_API_BASE_URL=http://${{ secrets.EC2_HOST_DNS }}:5000
-            
+
   deploy:
     runs-on: ubuntu-latest
     needs: build-push
-    
+
     steps:
-      - name: Checkout del código (Necesario para copiar archivos de orquestación)
+      - name: Checkout del código
         uses: actions/checkout@v4
-        
-      # --- 3A. Sincronizar Archivos (Solución al Directorio Vacío) ---
-      - name: Copiar archivos de Orquestación y DB a EC2
-        uses: appleboy/scp-action@v0.1.7 
-        with:
-          host: ${{ env.EC2_HOST }}
-          username: ${{ env.EC2_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "docker-compose.prod.yml, database"
-          target: "${{ env.REMOTE_DIR }}"
-          command_timeout: 100s
-          
-      # --- 3B. [cite_start]Ejecutar Docker Compose UP (Requisito: Despliegue en EC2) [cite: 13, 39] ---
-      - name: Ejecutar Docker Compose UP en EC2
+
+      # 1. Crear directorio remoto si no existe
+      - name: Crear directorio remoto en EC2
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ env.EC2_HOST }}
           username: ${{ env.EC2_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            # Moverse al directorio donde se copió el archivo
+            mkdir -p ${{ env.REMOTE_DIR }}
+
+      # 2. Copiar archivos correctamente
+      - name: Copiar docker-compose.prod.yml y database/
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ env.EC2_HOST }}
+          username: ${{ env.EC2_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          target: ${{ env.REMOTE_DIR }}
+          source: |
+            docker-compose.prod.yml
+            database/**
+
+      # 3. Ejecutar despliegue en EC2
+      - name: Ejecutar Docker Compose en EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ env.EC2_HOST }}
+          username: ${{ env.EC2_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
             cd ${{ env.REMOTE_DIR }}
-            
-            # --- EJECUCIÓN DEL DESPLIEGUE ---
-            
-            # 1. Detener e intentar limpiar contenedores viejos (Se quita --remove-orphans)
+
+            echo "Deteniendo contenedores previos..."
             docker compose down || true
-            docker pull mongo:6 
-            
-            # 2. Comando para hacer pull de las nuevas imágenes (usando el tag 'latest')
+
+            echo "Actualizando imágenes desde Docker Hub..."
             docker pull ${{ env.DOCKER_IMAGE_BACKEND }}:latest
             docker pull ${{ env.DOCKER_IMAGE_FRONTEND }}:latest
-            
-            # 3. Levantamos los contenedores con las variables de entorno de producción
-            echo "Ejecutando Docker Compose UP..."
-            
-            DOCKER_HUB_USERNAME="${{ secrets.DOCKER_HUB_USERNAME }}"
-            EC2_HOST_DNS="${{ secrets.EC2_HOST_DNS }}"
-            
-            # ¡CORRECCIÓN FINAL! Usar la versión larga del flag: --file en lugar de -f
-            DOCKER_HUB_USERNAME=$DOCKER_HUB_USERNAME \
-            EC2_HOST_DNS=$EC2_HOST_DNS \
+            docker pull mongo:6
+
+            echo "Iniciando despliegue con docker-compose.prod.yml..."
+            DOCKER_HUB_USERNAME="${{ secrets.DOCKER_HUB_USERNAME }}" \
+            EC2_HOST_DNS="${{ secrets.EC2_HOST_DNS }}" \
             docker compose --file docker-compose.prod.yml up -d
-            
-            echo "Verificación final de contenedores:"
+
+            echo "Contenedores corriendo:"
             docker ps
-            echo "¡DESPLIEGUE AUTOMÁTICO COMPLETO! La aplicación debe estar disponible en http://${EC2_HOST_DNS}"
+
+            echo "Despliegue completado. Aplicación disponible en:"
+            echo "http://${{ secrets.EC2_HOST_DNS }}"
