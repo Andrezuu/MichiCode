@@ -26,7 +26,6 @@ const QRGenerator: React.FC<QRGeneratorProps> = ({ onQrGenerated }) => {
 
     try {
       await apiService.saveQrHistory(text);
-
       onQrGenerated();
 
       const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=1024x1024&data=${encodeURIComponent(
@@ -34,14 +33,20 @@ const QRGenerator: React.FC<QRGeneratorProps> = ({ onQrGenerated }) => {
       )}`;
       const filename = `qr-michicode-${Date.now()}.png`;
 
+      const response = await fetch(qrApiUrl);
+      const blob = await response.blob();
+
+      const urlObject = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
-      link.href = qrApiUrl;
+      link.href = urlObject;
       link.setAttribute("download", filename);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+
+      window.URL.revokeObjectURL(urlObject);
     } catch (error) {
-      console.error("Error al guardar historial de QR:", error);
+      console.error("Error al guardar o descargar QR:", error);
     } finally {
       setLoading(false);
     }
@@ -52,7 +57,6 @@ const QRGenerator: React.FC<QRGeneratorProps> = ({ onQrGenerated }) => {
       elevation={10}
       sx={{ p: { xs: 3, sm: 5 }, borderRadius: 4, maxWidth: 600, mx: "auto" }}
     >
-           {" "}
       <Typography
         variant="h4"
         fontWeight="bold"
@@ -62,6 +66,7 @@ const QRGenerator: React.FC<QRGeneratorProps> = ({ onQrGenerated }) => {
       >
         Generador de Códigos QR
       </Typography>
+           {" "}
       <Stack spacing={4} mt={3}>
         <TextField
           fullWidth
