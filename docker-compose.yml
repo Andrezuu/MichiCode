@@ -5,6 +5,8 @@ services:
   mongo:
     image: mongo:6
     container_name: michicode-mongo
+    ports:
+      - "27017:27017"
     restart: always
     environment:
       # Usar credenciales por defecto para el desarrollo local
@@ -13,7 +15,7 @@ services:
       MONGO_INITDB_DATABASE: michicode
     volumes:
       - mongo-data:/data/db
-      - ./database/init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
+      #- ./database/init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
 
   # Backend: Node.js/Express
   backend:
