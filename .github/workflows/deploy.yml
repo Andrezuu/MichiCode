@@ -79,34 +79,36 @@ jobs:
       EC2_HOST: ${{ needs.terraform.outputs.ec2_ip }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ env.EC2_HOST }} >> ~/.ssh/known_hosts
+
       - name: Subir Configuraciones
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ env.EC2_HOST }}
-          username: ubuntu
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "docker-compose.prod.yml, monitoring/**"
-          target: "${{ env.REMOTE_DIR }}"
+        run: |
+          ssh -i ~/.ssh/id_rsa ubuntu@${{ env.EC2_HOST }} "mkdir -p ${{ env.REMOTE_DIR }}"
+          scp -i ~/.ssh/id_rsa docker-compose.prod.yml ubuntu@${{ env.EC2_HOST }}:${{ env.REMOTE_DIR }}/
+          scp -i ~/.ssh/id_rsa -r monitoring ubuntu@${{ env.EC2_HOST }}:${{ env.REMOTE_DIR }}/
 
       - name: Despliegue y Limpieza
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ env.EC2_HOST }}
-          username: ubuntu
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
+        run: |
+          ssh -i ~/.ssh/id_rsa ubuntu@${{ env.EC2_HOST }} << 'EOF'
             cd ${{ env.REMOTE_DIR }}
-            # [cite_start]1. Crear .env dinámico con secretos [cite: 102]
-            cat << EOF > .env.prod
+            
+            # Crear .env dinámico con secretos
+            cat << ENVEOF > .env.prod
             MONGO_INITDB_ROOT_USERNAME=${{ secrets.MONGO_INITDB_ROOT_USERNAME }}
             MONGO_INITDB_ROOT_PASSWORD=${{ secrets.MONGO_INITDB_ROOT_PASSWORD }}
             EC2_HOST_DNS=${{ secrets.EC2_HOST_DNS }}
-            EOF
+            ENVEOF
 
-            # 2. Limpieza agresiva de disco
+            # Limpieza agresiva de disco
             docker system prune -a -f 
             
-            # 3. Despliegue con tus comandos manuales + Monitoreo
+            # Despliegue con tus comandos manuales + Monitoreo
             docker stop frontend backend michicode-mongo || true
             docker rm frontend backend michicode-mongo || true
             docker network create michicode-net || true
@@ -121,6 +123,7 @@ jobs:
 
             # Levantar el resto (Grafana, Prometheus) con Compose
             docker-compose -f docker-compose.prod.yml up -d prometheus grafana node-exporter
+          EOF
 
       - name: Notificar Discord
         if: success()
