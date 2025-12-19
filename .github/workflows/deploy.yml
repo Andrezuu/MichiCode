@@ -77,7 +77,7 @@ jobs:
           host: ${{ env.EC2_HOST }}
           username: ${{ env.EC2_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "docker-compose.prod.yml, frontend/nginx.conf, monitoring/prometheus/prometheus.yml"
+          source: "docker-compose.prod.yml, frontend/nginx.conf, monitoring/**"
           target: "${{ env.REMOTE_DIR }}"
 
       - name: Ejecutar Despliegue con Comandos de Limpieza y Ejecución
@@ -87,18 +87,18 @@ jobs:
           username: ${{ env.EC2_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            # 1. Detener y eliminar contenedores específicos (Tus comandos solicitados)
-            docker stop frontend backend michicode-mongo || true
-            docker rm frontend backend michicode-mongo || true
+            # 1. Detener y eliminar contenedores específicos (Comandos requeridos) [cite: 1453]
+            docker stop frontend backend michicode-mongo michicode-prometheus michicode-grafana michicode-node-exporter || true
+            docker rm frontend backend michicode-mongo michicode-prometheus michicode-grafana michicode-node-exporter || true
             
-            # 2. Limpieza de sistema (Tus comandos solicitados) [cite: 1453]
+            # 2. Limpieza de sistema [cite: 1453]
             docker container prune -f
             docker image prune -f
             
-            # 3. Crear red si no existe (Necesario para tus comandos --network)
+            # 3. Crear red si no existe
             docker network create michicode-net || true
             
-            # 4. Ejecución de contenedores con tus parámetros exactos
+            # 4. Ejecución de contenedores de la aplicación [cite: 1309]
             # MongoDB
             docker run -d \
               --name michicode-mongo \
@@ -116,7 +116,7 @@ jobs:
               -p 5000:5000 \
               -e PORT=5000 \
               -e MONGODB_URI="mongodb://${{ secrets.MONGO_INITDB_ROOT_USERNAME }}:${{ secrets.MONGO_INITDB_ROOT_PASSWORD }}@michicode-mongo:27017/michicode?authSource=admin" \
-              -e BASE_URL="http://${{ env.EC2_HOST }}:5000" \
+              -e BASE_URL="http://${{ secrets.EC2_HOST_DNS }}:5000" \
               ${{ env.DOCKER_IMAGE_BACKEND }}:latest
             
             # Frontend
@@ -126,7 +126,7 @@ jobs:
               -p 80:80 \
               ${{ env.DOCKER_IMAGE_FRONTEND }}:latest
 
-            # 5. Levantar Monitoreo
+            # 5. Levantar Monitoreo (Orquestado con Docker Compose) [cite: 1309, 1312]
             cd ${{ env.REMOTE_DIR }}
             docker-compose -f docker-compose.prod.yml up -d prometheus grafana node-exporter
 
@@ -135,5 +135,5 @@ jobs:
         run: |
           curl -H "Content-Type: application/json" \
           -d '{
-            "content": "🚀 **Despliegue Finalizado**\n**SHA:** `${{ github.sha }}`\n**Estado:** Exitoso\n**URL App:** http://${{ secrets.EC2_HOST_IP }}\n**URL Grafana:** http://${{ secrets.EC2_HOST_IP }}:3000"
+            "content": "🚀 **Despliegue Finalizado**\n**SHA:** `${{ github.sha }}`\n**Usuario:** ${{ github.actor }}\n**Estado:** Exitoso\n**URL App:** http://${{ secrets.EC2_HOST_IP }}\n**URL Grafana:** http://${{ secrets.EC2_HOST_IP }}:3000"
           }' ${{ secrets.DISCORD_WEBHOOK }}
