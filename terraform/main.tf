@@ -42,13 +42,13 @@ resource "aws_security_group" "michicode_sg" {
   }
 }
 
-data "aws_ami" "ubuntu" {
+data "aws_ami" "amazon_linux" {
   most_recent = true
-  owners      = ["099720109477"] 
+  owners      = ["amazon"]
 
   filter {
     name   = "name"
-    values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
+    values = ["al2023-ami-*-x86_64"]
   }
 
   filter {
@@ -57,9 +57,8 @@ data "aws_ami" "ubuntu" {
   }
 }
 
-
 resource "aws_instance" "michicode_server" {
-  ami                    = data.aws_ami.ubuntu.id
+  ami                    = data.aws_ami.amazon_linux.id
   instance_type          = "t3.small"
   key_name               = "michicode-key"
   vpc_security_group_ids = [aws_security_group.michicode_sg.id]
