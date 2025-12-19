@@ -56,3 +56,8 @@ resource "aws_instance" "michicode_server" {
     Name = "MichiCode-Final-Server"
   }
 }
+
+output "public_ip" {
+  description = "IP Public de michicode_server"
+  value       = aws_instance.michicode_server.public_ip
+}
