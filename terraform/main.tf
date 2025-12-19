@@ -42,14 +42,29 @@ resource "aws_security_group" "michicode_sg" {
   }
 }
 
+data "aws_ami" "ubuntu" {
+  most_recent = true
+
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+}
+
+
 resource "aws_instance" "michicode_server" {
-  ami           = "ami-0c55b159cbfafe1f0"
-  instance_type = "t3.small"
-  key_name      = "michicode-key"
+  ami                    = data.aws_ami.ubuntu.id
+  instance_type          = "t3.small"
+  key_name               = "michicode-key"
   vpc_security_group_ids = [aws_security_group.michicode_sg.id]
 
   root_block_device {
-    volume_size = 20
+    volume_size = 30
   }
 
   tags = {
@@ -57,7 +72,3 @@ resource "aws_instance" "michicode_server" {
   }
 }
 
-output "public_ip" {
-  description = "IP Public de michicode_server"
-  value       = aws_instance.michicode_server.public_ip
-}
