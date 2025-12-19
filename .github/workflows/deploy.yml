@@ -92,20 +92,20 @@ jobs:
 
       - name: Subir Configuraciones
         run: |
-          ssh -i ~/.ssh/id_rsa ubuntu@${{ env.EC2_HOST }} "mkdir -p ${{ env.REMOTE_DIR }}"
-          scp -i ~/.ssh/id_rsa docker-compose.prod.yml ubuntu@${{ env.EC2_HOST }}:${{ env.REMOTE_DIR }}/
-          scp -i ~/.ssh/id_rsa -r monitoring ubuntu@${{ env.EC2_HOST }}:${{ env.REMOTE_DIR }}/
+          ssh -i ~/.ssh/id_rsa ec2-user@${{ env.EC2_HOST }} "mkdir -p ${{ env.REMOTE_DIR }}"
+          scp -i ~/.ssh/id_rsa docker-compose.prod.yml ec2-user@${{ env.EC2_HOST }}:${{ env.REMOTE_DIR }}/
+          scp -i ~/.ssh/id_rsa -r monitoring ec2-user@${{ env.EC2_HOST }}:${{ env.REMOTE_DIR }}/
 
       - name: Despliegue y Limpieza
         run: |
-          ssh -i ~/.ssh/id_rsa ubuntu@${{ env.EC2_HOST }} << 'EOF'
+          ssh -i ~/.ssh/id_rsa ec2-user@${{ env.EC2_HOST }} << 'EOF'
             cd ${{ env.REMOTE_DIR }}
             
             # Crear .env dinámico con secretos
             cat << ENVEOF > .env.prod
             MONGO_INITDB_ROOT_USERNAME=${{ secrets.MONGO_INITDB_ROOT_USERNAME }}
             MONGO_INITDB_ROOT_PASSWORD=${{ secrets.MONGO_INITDB_ROOT_PASSWORD }}
-            EC2_HOST_DNS=${{ env.EC2_DNS }}
+            EC2_HOST_DNS=${{ secrets.EC2_HOST_DNS }}
             ENVEOF
 
             # Limpieza agresiva de disco
