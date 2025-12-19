@@ -13,6 +13,9 @@ services:
       MONGO_INITDB_DATABASE: michicode
     volumes:
       - mongo-data:/data/db
+    networks:
+      - michi-network
+
   backend:
     build:
       context: ./backend 
@@ -27,6 +30,8 @@ services:
       BASE_URL: http://localhost:5000
     depends_on:
       - mongo
+    networks:
+      - michi-network
 
   frontend:
     build:
@@ -40,6 +45,48 @@ services:
       - "80:80"
     depends_on:
       - backend
+    networks:
+      - michi-network
+
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - michi-network
+
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - michi-network
+
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
+    volumes:
+      - ./monitoring/loki/loki-config.yml:/etc/loki/local-config.yaml
+    networks:
+      - michi-network
+
+  promtail:
+    image: grafana/promtail:latest
+    container_name: promtail
+    volumes:
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - ./monitoring/promtail/promtail-config.yml:/etc/promtail/config.yml
+    networks:
+      - michi-network
+
+networks:
+  michi-network:
+    driver: bridge
 
 volumes:
   mongo-data:
+  grafana-data:
