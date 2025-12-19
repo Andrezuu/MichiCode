@@ -8,7 +8,7 @@ variable "instance_type" {
   default     = "t3.micro"
 }
 
-#michicode-key.pem
 variable "key_name" {
-  type        = string
+  description = "clave SSH"
+  default        = string
 }
